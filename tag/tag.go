@@ -13,8 +13,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/dhowden/tag"
-	"github.com/dhowden/tag/mbz"
+	"github.com/xhenner/tag"
+	"github.com/xhenner/tag/mbz"
 )
 
 var raw bool

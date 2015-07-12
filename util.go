@@ -5,8 +5,11 @@
 package tag
 
 import (
+	"bytes"
 	"encoding/binary"
+	"errors"
 	"io"
+	"sort"
 )
 
 func getBit(b byte, n uint) bool {
@@ -49,6 +52,21 @@ func readString(r io.Reader, n int) (string, error) {
 	return string(b), nil
 }
 
+func WriteInt(i int, size int) ([]byte, error) {
+	var b bytes.Buffer
+	if err := binary.Write(&b, binary.BigEndian, int32(i)); err != nil {
+		return b.Bytes(), err
+	}
+	r := b.Bytes()
+	if size == 3 && r[0] != 0 {
+		return b.Bytes(), errors.New("integer too big")
+	}
+	if size == 3 {
+		return r[1:], nil
+	}
+	return r, nil
+}
+
 func readInt(r io.Reader, n int) (int, error) {
 	b, err := readBytes(r, n)
 	if err != nil {
@@ -69,4 +87,29 @@ func readInt32LittleEndian(r io.Reader) (int, error) {
 	var n int32
 	err := binary.Read(r, binary.LittleEndian, &n)
 	return int(n), err
+}
+
+// A data structure to hold a key/value pair.
+type Pair struct {
+	Key   string
+	Value int
+}
+
+// A slice of Pairs that implements sort.Interface to sort by Value.
+type PairList []Pair
+
+func (p PairList) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p PairList) Len() int           { return len(p) }
+func (p PairList) Less(i, j int) bool { return p[i].Value < p[j].Value }
+
+// A function to turn a map into a PairList, then sort and return it.
+func sortMapByValue(m map[string]int) PairList {
+	p := make(PairList, len(m))
+	i := 0
+	for k, v := range m {
+		p[i] = Pair{k, v}
+		i++
+	}
+	sort.Sort(p)
+	return p
 }

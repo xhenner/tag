@@ -184,9 +184,10 @@ func readID3v2_4FrameHeader(r io.Reader) (name string, size int, headerSize int,
 }
 
 // readID3v2Frames reads ID3v2 frames from the given reader using the ID3v2Header.
-func readID3v2Frames(r io.Reader, h *id3v2Header) (map[string]interface{}, error) {
+func readID3v2Frames(r io.Reader, h *id3v2Header) (map[string]interface{}, map[string]int, error) {
 	offset := 10 // the size of the header
 	result := make(map[string]interface{})
+	positions := make(map[string]int)
 
 	for offset < h.Size {
 		var err error
@@ -201,7 +202,7 @@ func readID3v2Frames(r io.Reader, h *id3v2Header) (map[string]interface{}, error
 		case ID3v2_3:
 			name, size, headerSize, err = readID3v2_3FrameHeader(r)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			flags, err = readID3v23FrameFlags(r)
 			headerSize += 2
@@ -209,14 +210,14 @@ func readID3v2Frames(r io.Reader, h *id3v2Header) (map[string]interface{}, error
 		case ID3v2_4:
 			name, size, headerSize, err = readID3v2_4FrameHeader(r)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			flags, err = readID3v24FrameFlags(r)
 			headerSize += 2
 		}
 
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		// FIXME: Do we still need this?
@@ -237,7 +238,7 @@ func readID3v2Frames(r io.Reader, h *id3v2Header) (map[string]interface{}, error
 			if flags.Compression {
 				_, err = read7BitChunkedInt(r, 4) // read 4
 				if err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 				size -= 4
 			}
@@ -245,7 +246,7 @@ func readID3v2Frames(r io.Reader, h *id3v2Header) (map[string]interface{}, error
 			if flags.Encryption {
 				_, err = readBytes(r, 1) // read 1 byte of encryption method
 				if err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 				size -= 1
 			}
@@ -253,7 +254,7 @@ func readID3v2Frames(r io.Reader, h *id3v2Header) (map[string]interface{}, error
 
 		b, err := readBytes(r, size)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		// There can be multiple tag with the same name. Append a number to the
@@ -270,64 +271,66 @@ func readID3v2Frames(r io.Reader, h *id3v2Header) (map[string]interface{}, error
 		case name == "TXXX" || name == "TXX":
 			t, err := readTextWithDescrFrame(b, false, true) // no lang, but enc
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			result[rawName] = t
 
 		case name[0] == 'T':
 			txt, err := readTFrame(b)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			result[rawName] = txt
 
 		case name == "UFID" || name == "UFI":
 			t, err := readUFID(b)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			result[rawName] = t
 
 		case name == "WXXX" || name == "WXX":
 			t, err := readTextWithDescrFrame(b, false, false) // no lang, no enc
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			result[rawName] = t
 
 		case name[0] == 'W':
 			txt, err := readWFrame(b)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			result[rawName] = txt
 
 		case name == "COMM" || name == "USLT":
 			t, err := readTextWithDescrFrame(b, true, true) // both lang and enc
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			result[rawName] = t
 
 		case name == "APIC":
 			p, err := readAPICFrame(b)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			result[rawName] = p
 
 		case name == "PIC":
 			p, err := readPICFrame(b)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			result[rawName] = p
 
 		default:
 			result[rawName] = b
 		}
+		// mark the position of each tag
+		positions[rawName] = offset
 	}
-	return result, nil
+	return result, positions, nil
 }
 
 type unsynchroniser struct {
@@ -368,11 +371,11 @@ func ReadID3v2Tags(r io.ReadSeeker) (Metadata, error) {
 		ur = &unsynchroniser{Reader: r}
 	}
 
-	f, err := readID3v2Frames(ur, h)
+	f, p, err := readID3v2Frames(ur, h)
 	if err != nil {
 		return nil, err
 	}
-	return metadataID3v2{header: h, frames: f}, nil
+	return metadataID3v2{header: h, frames: f, positions: p}, nil
 }
 
 //  id3v2genre parse a id3v2 genre tag and expand the numeric genres

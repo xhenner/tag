@@ -5,7 +5,7 @@ package mbz
 import (
 	"strings"
 
-	"github.com/dhowden/tag"
+	"github.com/xhenner/tag"
 )
 
 // Supported MusicBrainz tag names.
