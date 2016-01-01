@@ -303,7 +303,7 @@ func readID3v2Frames(r io.Reader, h *id3v2Header) (map[string]interface{}, map[s
 			}
 			result[rawName] = txt
 
-		case name == "COMM" || name == "USLT":
+		case name == "COMM" || name == "COM" || name == "USLT" || name == "ULT":
 			t, err := readTextWithDescrFrame(b, true, true) // both lang and enc
 			if err != nil {
 				return nil, nil, err
